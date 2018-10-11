@@ -30,7 +30,7 @@ Website UI
         
         move to new page for simplicity?
     
-    Visualizer 
+   Visualizer 
       
       No buttons
       
