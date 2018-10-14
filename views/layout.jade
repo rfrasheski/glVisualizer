@@ -1,0 +1,11 @@
+- var bodyClass;
+block variables
+doctype html
+html
+  head
+    title= title
+    link(rel='stylesheet', href='/stylesheets/style.css')
+  body(class=bodyClass)
+    block content
+    script(src='javascripts/lib/typed.js')
+    script(src='javascripts/lib/require.js' data-main="/javascripts/app")

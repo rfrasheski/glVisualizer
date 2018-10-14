@@ -1,0 +1,24 @@
+$translucent-red: rgba(255, 0, 0, 0.5);
+$translucent-green: rgba(0, 255, 0, 0.5);
+$translucent-blue: rgba(0, 0, 255, 0.5);
+
+html 
+  background: transparentize($translucent-blue, 0.25); 
+  color: $translucent-blue;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  text-align: center;
+  
+  body
+    padding: 50px
+    font: 14px "Lucida Grande", Helvetica, Arial, sans-serif
+
+    
+  p 
+    color: opacify($translucent-red, 0.3);
+    background-color: transparentize($translucent-red, 0.25);
+
+  a
+    color: #00B7FF
