@@ -1,5 +1,8 @@
 # glVisualizer
 
+REQUIRED: INSTALL NODEJS TO RUN LOCALLY
+
+
 Website UI
 
   NO SCROLLING
