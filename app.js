@@ -12,6 +12,14 @@ const loginRouter = require('./routes/login');
 const callbackRouter = require('./routes/callback');
 const visualizerRouter = require('./routes/visualizer');
 
+ var requirejs = require('requirejs');
+requirejs.config({
+  paths: {
+    es6: "lib/requirejs-babel/es6",
+    babel: "lib/requirejs-babel/babel-4.6.6.min"
+  }
+});
+  
 var app = express();
 
 // view engine setup
