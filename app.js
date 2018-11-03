@@ -11,14 +11,9 @@ const authRouter = require('./routes/auth');
 const loginRouter = require('./routes/login');
 const callbackRouter = require('./routes/callback');
 const visualizerRouter = require('./routes/visualizer');
+const refreshRouter = require('./routes/refresh');
 
- var requirejs = require('requirejs');
-requirejs.config({
-  paths: {
-    es6: "lib/requirejs-babel/es6",
-    babel: "lib/requirejs-babel/babel-4.6.6.min"
-  }
-});
+var requirejs = require('requirejs');
   
 var app = express();
 
@@ -44,6 +39,7 @@ app.use('/auth', authRouter);
 app.use('/login', loginRouter);
 app.use('/callback', callbackRouter);
 app.use('/visualizer', visualizerRouter);
+app.use('/refresh', refreshRouter);
 
 // catch 404 and forward to error handler
 app.use(function(req, res, next) {
