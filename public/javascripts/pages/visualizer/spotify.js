@@ -182,6 +182,7 @@ class Spotify {
       /** If we hit our error limit, stop trusting server and adjust initial track progress using `response.progress_ms`. */
       if (this.errorCount === this.errorLimit) {
         console.log('Re-syncing using `progress_ms`')
+        console.log(`timestamp: ${response.timestamp}`)
         this.trustServer = false
         this.errorCount = 0
         this.stopVisualizer()
