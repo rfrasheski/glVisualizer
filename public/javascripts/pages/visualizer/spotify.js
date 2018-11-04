@@ -185,9 +185,9 @@ class Spotify {
         console.log(`timestamp: ${response.timestamp}`)
         this.trustServer = false
         this.errorCount = 0
-        this.stopVisualizer()
+        // this.stopVisualizer()
         this.initialTrackProgress = response.progress_ms + ((window.performance.now() - response.latency))
-        this.startVisualizer(true)
+        // this.startVisualizer(true)
         return this.pingSpotify()
       }
     }

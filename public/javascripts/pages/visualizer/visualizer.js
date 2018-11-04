@@ -6,7 +6,7 @@ Array.prototype.randomElement = function() {
   return this[Math.floor(Math.random() * this.length)]
 }
 
-let vertex_shader = `
+let old_vertex_shader = `
   attribute vec2 aVertexPosition;
 
   uniform vec2 uScalingFactor;
@@ -14,10 +14,8 @@ let vertex_shader = `
 
   void main() {
     vec2 rotatedPosition = vec2(
-      aVertexPosition.x * uRotationVector.y +
-            aVertexPosition.y * uRotationVector.x,
-      aVertexPosition.y * uRotationVector.y -
-            aVertexPosition.x * uRotationVector.x
+      aVertexPosition.x * uRotationVector.y + aVertexPosition.y * uRotationVector.x,
+      aVertexPosition.y * uRotationVector.y - aVertexPosition.x * uRotationVector.x
     );
 
     gl_Position = vec4(rotatedPosition * uScalingFactor, 0.0, 1.0);
@@ -32,16 +30,57 @@ let fragment_shader = `
   uniform vec4 uGlobalColor;
 
   void main() {
+    float r = 0.0, delta = 0.0, alpha = 1.0;
+    vec2 cxy = 2.0 * gl_PointCoord - 1.0;
+    r = dot(cxy, cxy);
+    if (r > 1.0) {
+      discard;
+    }
     gl_FragColor = uGlobalColor;
   }
 `;
+
+let vertex_circle = `
+  attribute vec2 aVertexPosition;
+
+  uniform float maxPointSize;
+  uniform float uScalingFactor;
+
+  void main()
+  {
+    gl_Position =  vec4(aVertexPosition, 0.0, 1.0);
+    gl_PointSize = maxPointSize * uScalingFactor;
+  }`;
+  
+let fragment_circle_aliased_edges_needsbackgroundfix = `
+  #extension GL_OES_standard_derivatives : enable
+  precision mediump float;
+  //varying  vec4 color;
+  uniform vec4 uGlobalColor;
+
+  void main()
+  {
+    float r = 0.0, delta = 0.0, alpha = 1.0;
+    vec2 cxy = 2.0 * gl_PointCoord - 1.0;
+    r = dot(cxy, cxy);
+    delta = fwidth(r);
+    alpha = 1.0 - smoothstep(1.0 - delta, 1.0 + delta, r);
+    vec4 c = uGlobalColor * alpha;
+    if (c.w < 1.0) {
+      //discard;
+    }
+    gl_FragColor = uGlobalColor * alpha;
+  }`;
 
  class Visualizer extends Spotify {
   constructor(_static) {
     super()
     
-    this.initCanvas()
+    this.initCanvas()  
+    this.setSizeRange()
     this.initGL()
+    
+    this.sizeSwitch = false
     // this.setParameters()
     this.setInitialState()
 
@@ -62,9 +101,8 @@ let fragment_shader = `
     const next = this.trackAnalysis.segments[segment.index + 1] ? this.trackAnalysis.segments[segment.index + 1].loudness_max : segment.loudness_max
     const active = (segment.loudness_max + last + next)/3
     this.activeSize = (this.maxSize + (active * 25)) + (this.trackFeatures.loudness * -15)
-
-
   }
+  
   /**
    * Set reference to <canvas> element and 2d context. 
    * @param {boolean} reset (optional) – resets <canvas> size without affecting other properties. 
@@ -81,9 +119,10 @@ let fragment_shader = `
   }
 
   initGL() {
-    var gl = this.canvas.getContext("webgl")
+    var gl = this.canvas.getContext("webgl", {alpha:true, antialias:true})
     this.gl = gl // not sure why this double liner is necessary for this object
-         
+    gl.getExtension('GL_OES_standard_derivatives');
+    gl.getExtension('OES_standard_derivatives');
     // // Set clear color to black, fully opaque
     // this.gl.clearColor(0.0, 0.0, 0.0, 1.0);
     // // Clear the color buffer with specified clear color
@@ -92,46 +131,40 @@ let fragment_shader = `
     this.shaderProgram = this.buildShaderProgram()
     
     this.aspectRatio = this.canvas.width / this.canvas.height;
-    this.currentRotation = [0, 1];
-    this.currentScale = [1.0, this.aspectRatio];
-
+    //this.currentScale = [1.0, this.aspectRatio];
+    this.currentScale = 0.5;
     // Vertex information
+    
+    //circle stuff
+    var point = new Float32Array([0.0, 0.0]);
 
-    this.vertexArray = new Float32Array([
-      -0.5, 0.5, 0.5, 0.5, 0.5, -0.5,
-      -0.5, 0.5, 0.5, -0.5, -0.5, -0.5
-    ]);
+    gl.enable(gl.DEPTH_TEST);
     this.vertexBuffer = this.gl.createBuffer();
     this.gl.bindBuffer(gl.ARRAY_BUFFER, this.vertexBuffer)
-    this.gl.bufferData(gl.ARRAY_BUFFER, this.vertexArray, gl.STATIC_DRAW)
+    this.gl.bufferData(gl.ARRAY_BUFFER, point, gl.STATIC_DRAW)
     this.vertexNumComponents = 2;
-    this.vertexCount = this.vertexArray.length / this.vertexNumComponents;
-    
-    this.currentAngle = 0.0
-    this.rotationRate = 6
-
+    this.vertexCount = 1;
+   
     // Rendering data shared with the
     // scalers.
 
-    this.uScalingFactor = 0;
+    this.uScalingFactor = 200;
     this.uGlobalColor = 0;
-    this.uRotationVector = 0;
     this.aVertexPosition = 0;
 
     // Animation timing
 
     this.previousTime = 0.0;
-    this.degreesPerSecond = 90.0;
   }
   
   buildShaderProgram() {
     let program = this.gl.createProgram();
 
     let vShader = this.gl.createShader(this.gl.VERTEX_SHADER)
-    this.gl.shaderSource(vShader, vertex_shader)
+    this.gl.shaderSource(vShader, vertex_circle)
     this.gl.compileShader(vShader)
     if (!this.gl.getShaderParameter(vShader, this.gl.COMPILE_STATUS)) {
-      console.log(`Error compiling ${type === gl.VERTEX_SHADER ? "vertex" : "fragment"} shader:`);
+      console.log(`Error compiling vertex shader:`);
       console.log(this.gl.getShaderInfoLog(vShader));
     }
     this.gl.attachShader(program, vShader)
@@ -140,22 +173,10 @@ let fragment_shader = `
     this.gl.shaderSource(fShader, fragment_shader)
     this.gl.compileShader(fShader)
     if (!this.gl.getShaderParameter(fShader, this.gl.COMPILE_STATUS)) {
-      console.log(`Error compiling ${type === gl.VERTEX_SHADER ? "vertex" : "fragment"} shader:`);
+      console.log(`Error compiling fragment shader:`);
       console.log(this.gl.getShaderInfoLog(fShader));
     }
     this.gl.attachShader(program, fShader)
-    // shaderInfo.forEach(function(desc) {
-      // console.log(document.getElementById(desc.id).innerHTML)
-      
-      // let code = document.getElementById(desc.id).firstChild.nodeValue;
-      // let shader = this.gl.createShader(desc.type);
-
-      // this.gl.shaderSource(shader, code);
-      // this.gl.compileShader(shader);
-      // if (shader) {
-        // this.gl.attachShader(program, shader);
-      // }
-    // });
 
     this.gl.linkProgram(program)
 
@@ -167,23 +188,19 @@ let fragment_shader = `
     return program;
   }
 
+  // idea: alternate enlarge, make smaller on each beat 
   animateScene() {
     this.gl.viewport(0, 0, this.canvas.width, this.canvas.height);
     this.gl.clearColor(0.8, 0.9, 1.0, 1.0);
     this.gl.clear(this.gl.COLOR_BUFFER_BIT);
 
-    let radians = this.currentAngle * Math.PI / 180.0;
-    this.currentRotation[0] = Math.sin(radians);
-    this.currentRotation[1] = Math.cos(radians);
-
     this.gl.useProgram(this.shaderProgram);
 
+    this.uPointSize = this.gl.getUniformLocation(this.shaderProgram, "maxPointSize");
     this.uScalingFactor = this.gl.getUniformLocation(this.shaderProgram, "uScalingFactor");
     this.uGlobalColor = this.gl.getUniformLocation(this.shaderProgram, "uGlobalColor");
-    this.uRotationVector = this.gl.getUniformLocation(this.shaderProgram, "uRotationVector");
-
-    this.gl.uniform2fv(this.uScalingFactor, this.currentScale);
-    this.gl.uniform2fv(this.uRotationVector, this.currentRotation);
+    this.gl.uniform1f(this.uPointSize, this.maxSize)
+    this.gl.uniform1f(this.uScalingFactor, this.currentScale);
     this.gl.uniform4fv(this.uGlobalColor, [0.1, 0.7, 0.2, 1.0]);
 
     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.vertexBuffer);
@@ -193,14 +210,37 @@ let fragment_shader = `
     this.gl.enableVertexAttribArray(this.aVertexPosition);
     this.gl.vertexAttribPointer(this.aVertexPosition, this.vertexNumComponents, this.gl.FLOAT, false, 0, 0);
 
-    this.gl.drawArrays(this.gl.TRIANGLES, 0, this.vertexCount);
+    this.gl.drawArrays(this.gl.GL_POINTS, 0, this.vertexCount);
 
-    window.requestAnimationFrame((function(currentTime) {
-      let deltaAngle = ((currentTime - this.previousTime) / 1000.0) * this.degreesPerSecond;
+    this.state.raf = window.requestAnimationFrame((function(currentTime) {
+      this.trackProgress = (currentTime - this.initialStart) + this.initialTrackProgress
 
-      this.currentAngle = (this.currentAngle + deltaAngle) % 360;
+      /*
+      * For each interval type, find current interval.
+      * If current interval index has changed, set active interval and execute interval hook.
+      */
+      this.intervals.types.forEach((type) => {
+        const index = this.determineInterval(type)
 
+        if (!this.intervals.active[type].start || index !== this.intervals.active[type].index) {
+          this.setActiveInterval(type, index)
+          if (type === 'beats' ) {
+            this.sizeSwitch = !this.sizeSwitch
+          }
+          // this.executeHook(type, index)
+        }
+      })      
+      if (this.sizeSwitch) {
+        this.currentScale = this.currentScale + .01
+      } else {
+        this.currentScale = this.currentScale - .01
+      }
+      if (this.currentScale > 1 || this.currentScale < 0) {
+        this.currentScale = 0.5 // reset to retain visuals
+      }
+      
       this.previousTime = currentTime;
+      //this.currentScale = (Math.sin(currentTime / 10000) + 1) / 2.0;
       this.animateScene();
     }).bind(this));
   }
@@ -210,12 +250,8 @@ let fragment_shader = `
    */
   onResize() {
     this.initCanvas(true)
+    this.initGL()
     this.setSizeRange()
-
-    // this.state.active.background.set({
-      // width: this.canvas.width,
-      // height: this.canvas.height
-    // }).draw(this.ctx)
   }
 
   /**
@@ -323,6 +359,11 @@ let fragment_shader = `
       console.log('CANCEL requestAnimationFrame() – {any}')
       cancelAnimationFrame(this.state.raf)
     }
+    
+    /* 
+    add a resync event?
+    goal: do not rebuild shaders, stop draw loop,
+    */
   }
 
   /**
