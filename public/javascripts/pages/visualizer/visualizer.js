@@ -55,21 +55,36 @@ let vertex_circle = `
 let fragment_circle_aliased_edges_needsbackgroundfix = `
   #extension GL_OES_standard_derivatives : enable
   precision mediump float;
-  //varying  vec4 color;
   uniform vec4 uGlobalColor;
 
   void main()
   {
+    // gl_PointCoord = coordinate of fragment(pixel) within the POINT. Varies from [0, 1]
     float r = 0.0, delta = 0.0, alpha = 1.0;
-    vec2 cxy = 2.0 * gl_PointCoord - 1.0;
-    r = dot(cxy, cxy);
+    
+    // normalize to [-1, 1]
+    vec2 cxy = 2.0 * gl_PointCoord - 1.0; 
+    
+    // this is essentially: x^2 + y^2 = 1    this is a unit circle radius
+    r = dot(cxy, cxy); 
+    
+    // fwidth — return the sum of the absolute value of derivatives in x and y
+    // returns the maximum change in a given fragment shader variable in the neighbourhood of the current pixel (8 surrounding pixels)
     delta = fwidth(r);
+    
+    // pixels outside r have their alpha set to 0 smoothly over 2*delta interval at edge (smoothening great change in pixel colors)
     alpha = 1.0 - smoothstep(1.0 - delta, 1.0 + delta, r);
-    vec4 c = uGlobalColor * alpha;
-    if (c.w < 1.0) {
-      //discard;
+    
+    // if r < 1.0, uGlobalColor * alpha
+    // if r > 1.0, background * inverted alpha
+    float iAlpha = 1.0 - alpha;
+    if (r > 1.0 + delta) {
+      // problem: when alpha lowers on circle color, background color behind it is css background not canvas
+      //        this is still better than without but not ideal
+      gl_FragColor = vec4(0.8, 0.9, 1.0, 1.0);// * iAlpha;
+    } else {
+      gl_FragColor = uGlobalColor * alpha; // set color and alpha
     }
-    gl_FragColor = uGlobalColor * alpha;
   }`;
 
  class Visualizer extends Spotify {
@@ -123,6 +138,7 @@ let fragment_circle_aliased_edges_needsbackgroundfix = `
     this.gl = gl // not sure why this double liner is necessary for this object
     gl.getExtension('GL_OES_standard_derivatives');
     gl.getExtension('OES_standard_derivatives');
+    this.canvasBackgroundColor = Float32Array[0.8, 0.9, 1.0, 1.0];
     // // Set clear color to black, fully opaque
     // this.gl.clearColor(0.0, 0.0, 0.0, 1.0);
     // // Clear the color buffer with specified clear color
@@ -170,7 +186,7 @@ let fragment_circle_aliased_edges_needsbackgroundfix = `
     this.gl.attachShader(program, vShader)
     
     let fShader = this.gl.createShader(this.gl.FRAGMENT_SHADER)
-    this.gl.shaderSource(fShader, fragment_shader)
+    this.gl.shaderSource(fShader, fragment_circle_aliased_edges_needsbackgroundfix)
     this.gl.compileShader(fShader)
     if (!this.gl.getShaderParameter(fShader, this.gl.COMPILE_STATUS)) {
       console.log(`Error compiling fragment shader:`);
@@ -193,6 +209,7 @@ let fragment_circle_aliased_edges_needsbackgroundfix = `
     this.gl.viewport(0, 0, this.canvas.width, this.canvas.height);
     this.gl.clearColor(0.8, 0.9, 1.0, 1.0);
     this.gl.clear(this.gl.COLOR_BUFFER_BIT);
+    //this.gl.blendFunc(this.gl.SRC_ALPHA, this.gl.ONE_MINUS_SRC_ALPHA); // To disable the background color of the canvas element
 
     this.gl.useProgram(this.shaderProgram);
 
@@ -250,7 +267,7 @@ let fragment_circle_aliased_edges_needsbackgroundfix = `
    */
   onResize() {
     this.initCanvas(true)
-    this.initGL()
+    //this.initGL()
     this.setSizeRange()
   }
 
