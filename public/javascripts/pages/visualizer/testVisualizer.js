@@ -83,9 +83,20 @@ let fragment_circle_aliased_edges = `
     }
   }`;
 
+let vertex_rect = `
+  precision mediump float;
+  attribute vec2 aVertexPosition;
+
+  void main()
+  {
+    gl_Position =  vec4(aVertexPosition, 0.0, 1.0);
+  }`;
+  
 let pixel_creation = `
+  precision mediump float;
+
   //  define t iTime
-  uniform int iTime;
+  uniform float iTime;
   //define r iResolution.xy
   uniform vec2 iResolution;
     
@@ -105,8 +116,8 @@ let pixel_creation = `
     // fragColor=vec4(c/l,t);
   // }
   
-  void main(){
-    vec2 p = gl_FragCoord/iResolution.xy - 0.5; // -0.5 -- 0.5
+  void main() {
+    vec2 p = gl_FragCoord.xy/iResolution.xy - 0.5; // -0.5 -- 0.5
     p.x*=iResolution.x/iResolution.y;
     float l = length(p);
     float t = iTime;
@@ -118,9 +129,67 @@ let pixel_creation = `
       c[i]=.01/length( fract(0.5+a)-0.5 );
     }
     gl_FragColor=vec4(c/l,0.);
-}
- 
+  }
   `; 
+  
+let labrynth = `
+  #ifdef GL_ES
+  precision mediump float;
+  #endif
+
+  #extension GL_OES_standard_derivatives : enable
+
+  uniform float time;
+  uniform vec2 mouse;
+  uniform vec2 resolution;
+
+  float layer(vec2 uv) {
+    float s = .5;
+    for (int i = 0; i < 8; i++) {
+      uv = abs(uv) - s;
+      uv *= 1.25;
+      uv = uv.yx;
+      float cs = cos(time * .1);
+      float sn = sin(time * .1);
+      uv *= mat2(cs, sn, -sn, cs);
+      s *= .995;
+    }
+    float d = abs(max(abs(uv.x), abs(uv.y)) -.3);
+    return .01 / d;
+  }
+
+  void main() {
+    vec2 uv = (2. * gl_FragCoord.xy - resolution) / resolution.y;
+    float s = .05;	
+    for (int i = 0; i < 4; i++) {
+      uv = abs(uv) - s;
+      uv *= 1.25;
+      uv = uv.yx;
+      float cs = cos(time * .1);
+      float sn = sin(time * .1);
+      uv *= mat2(cs, sn, -sn, cs);
+      s *= .995;
+    }
+    float cs = cos(time * .01);
+    float sn = sin(time * .4);
+    uv *= mat2(cs, sn, -sn, cs);
+    vec3 col = vec3(0.);
+    for (float i = 0.; i < 1.; i += .4) {
+      float cs = cos(.05);
+      float sn = sin(.05);
+      uv *= mat2(cs, sn, -sn, cs);
+      float t = fract(i + time * .2);
+      float s = smoothstep(1., 0., t);
+      float f = smoothstep(2., .1, t);
+      f *= smoothstep(0., 1., t);
+      col.yz += layer(uv * s) * f;
+      col.x += layer(uv*s) * f * .3;
+    }
+    if (col.x == 0.)
+      col.x = .4;
+    gl_FragColor = vec4(col, 1.);
+  }
+`;
  class Visualizer extends Spotify {
   constructor(_static) {
     super()
@@ -187,13 +256,18 @@ let pixel_creation = `
     
     //circle stuff
     var point = new Float32Array([0.0, 0.0]);
-
+    var vertices = new Float32Array([
+              -1.0, 1.0, 1.0, 1.0, 1.0, -1.0,
+              -1.0, 1.0, 1.0, -1.0, -1.0, -1.0
+      ]);
+    var rect = new Float32Array([-1.0, -1.0], [-1.0, 1.0], [1.0, 1.0], [1.0, -1.0]);
+    
     gl.enable(gl.DEPTH_TEST);
     this.vertexBuffer = this.gl.createBuffer();
     this.gl.bindBuffer(gl.ARRAY_BUFFER, this.vertexBuffer)
-    this.gl.bufferData(gl.ARRAY_BUFFER, point, gl.STATIC_DRAW)
+    this.gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW)
     this.vertexNumComponents = 2;
-    this.vertexCount = 1;
+    this.vertexCount = 6;
    
     // Rendering data shared with the
     // scalers.
@@ -201,6 +275,7 @@ let pixel_creation = `
     this.uScalingFactor = 200;
     this.uGlobalColor = 0;
     this.aVertexPosition = 0;
+    
 
     // Animation timing
 
@@ -211,7 +286,7 @@ let pixel_creation = `
     let program = this.gl.createProgram();
 
     let vShader = this.gl.createShader(this.gl.VERTEX_SHADER)
-    this.gl.shaderSource(vShader, vertex_circle)
+    this.gl.shaderSource(vShader, vertex_rect)
     this.gl.compileShader(vShader)
     if (!this.gl.getShaderParameter(vShader, this.gl.COMPILE_STATUS)) {
       console.log(`Error compiling vertex shader:`);
@@ -220,7 +295,7 @@ let pixel_creation = `
     this.gl.attachShader(program, vShader)
     
     let fShader = this.gl.createShader(this.gl.FRAGMENT_SHADER)
-    this.gl.shaderSource(fShader, fragment_circle_aliased_edges)
+    this.gl.shaderSource(fShader, pixel_creation)
     this.gl.compileShader(fShader)
     if (!this.gl.getShaderParameter(fShader, this.gl.COMPILE_STATUS)) {
       console.log(`Error compiling fragment shader:`);
@@ -234,7 +309,6 @@ let pixel_creation = `
       console.log("Error linking shader program:");
       console.log(this.gl.getProgramInfoLog(program));
     }
-
     return program;
   }
 
@@ -246,13 +320,13 @@ let pixel_creation = `
     //this.gl.blendFunc(this.gl.SRC_ALPHA, this.gl.ONE_MINUS_SRC_ALPHA); // To disable the background color of the canvas element
 
     this.gl.useProgram(this.shaderProgram);
-
-    this.uPointSize = this.gl.getUniformLocation(this.shaderProgram, "maxPointSize");
-    this.uScalingFactor = this.gl.getUniformLocation(this.shaderProgram, "uScalingFactor");
+    
     this.uGlobalColor = this.gl.getUniformLocation(this.shaderProgram, "uGlobalColor");
-    this.gl.uniform1f(this.uPointSize, this.maxSize)
-    this.gl.uniform1f(this.uScalingFactor, this.currentScale);
-    this.gl.uniform4fv(this.uGlobalColor, [0.1, 0.7, 0.2, 1.0]);
+    this.uTime = this.gl.getUniformLocation(this.shaderProgram, "iTime");
+    this.uResolution = this.gl.getUniformLocation(this.shaderProgram, "iResolution");
+    
+    this.gl.uniform1f(this.uTime, this.previousTime/2000);
+    this.gl.uniform2fv(this.uResolution, [this.canvas.width, this.canvas.height]);
 
     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.vertexBuffer);
 
@@ -261,7 +335,9 @@ let pixel_creation = `
     this.gl.enableVertexAttribArray(this.aVertexPosition);
     this.gl.vertexAttribPointer(this.aVertexPosition, this.vertexNumComponents, this.gl.FLOAT, false, 0, 0);
 
-    this.gl.drawArrays(this.gl.GL_POINTS, 0, this.vertexCount);
+    // console.log(this.gl.CURRENT_PROGRAM);
+
+    this.gl.drawArrays(this.gl.TRIANGLES, 0, this.vertexCount);
 
     this.state.raf = window.requestAnimationFrame((function(currentTime) {
       this.trackProgress = (currentTime - this.initialStart) + this.initialTrackProgress

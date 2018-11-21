@@ -6,7 +6,7 @@ requirejs.config({
   }
 });
   
-define(["es6!./pages/index", "es6!./pages/visualizer/visualizer", "es6!./pages/visualizer/spotify", "es6!./pages/visualizer/toast", "es6!./pages/visualizer/colors", "es6!./pages/visualizer/background"], function (Index, Visualizer, Spotify, Toast, Colors, Background) {
+define(["es6!./pages/index", "es6!./pages/visualizer/testVisualizer", "es6!./pages/visualizer/spotify", "es6!./pages/visualizer/toast", "es6!./pages/visualizer/colors", "es6!./pages/visualizer/background"], function (Index, Visualizer, Spotify, Toast, Colors, Background) {
     class App {
       constructor() {
         const bodyClass = document.body.classList
